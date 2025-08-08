@@ -192,3 +192,9 @@ Thumbs.db
 # Windows specific
 *.lnk
 desktop.ini
+
+# Project specific
+.kiro/
+*.pdf
+*.md
+!README.md

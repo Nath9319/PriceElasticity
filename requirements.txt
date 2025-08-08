@@ -86,3 +86,11 @@ ipywidgets>=7.7.0
 # Additional Math and Statistics
 sympy>=1.10.0
 patsy>=0.5.0
+
+# UI and Web Applications
+streamlit>=1.28.0
+streamlit-plotly>=0.0.1
+streamlit-aggrid>=0.3.4
+streamlit-option-menu>=0.3.6
+streamlit-shadcn-ui>=0.0.6
+dash>=2.14.0
