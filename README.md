@@ -23,21 +23,41 @@ A comprehensive B2B price elasticity modeling platform with advanced machine lea
 ```
 Price Elasticity/
 ├── src/                           # Source code modules
+│   ├── analysis/                  # Advanced analytics and insights
+│   │   └── scenario_analysis.py   # What-if scenario modeling
+│   ├── data_processing/           # Data ingestion and preprocessing
+│   ├── explainability/            # Model interpretation and explanation
+│   │   └── model_explainer.py     # SHAP and feature importance analysis
 │   ├── feature_engineering/       # Feature engineering pipeline
+│   │   └── feature_engineering.py # Comprehensive feature creation
+│   ├── inference/                 # Real-time prediction services
+│   ├── models/                    # Advanced model architectures
+│   │   └── graph_neural_networks.py # GNN for competitive analysis
 │   ├── training/                  # Model training components
-│   └── utils/                     # Configuration and utilities
+│   │   └── model_training.py      # Multi-model training pipeline
+│   ├── utils/                     # Configuration and utilities
+│   │   ├── __init__.py            # Package initialization
+│   │   └── config_loader.py       # Configuration management
+│   ├── validation/                # Data and model validation
+│   │   └── data_validator.py      # Comprehensive data validation
+│   └── visualization/             # Advanced plotting and dashboards
 ├── config/                        # Configuration files
+├── data/                          # Data storage and samples
+├── datasets/                      # Training and validation datasets
+├── logs/                          # Application logs and monitoring
 ├── models/                        # Trained models and artifacts
 │   ├── trained/                   # Saved model files
 │   └── feature_engineering/       # Feature transformation artifacts
-├── outputs/                       # Generated outputs
-│   ├── plots/                     # Visualization outputs
-│   └── reports/                   # Training and analysis reports
-├── logs/                          # Application logs and monitoring
-├── scripts/                       # Utility scripts
+├── notebooks/                     # Jupyter notebooks for analysis
+├── results/                       # Experiment results and reports
+├── scripts/                       # Utility and automation scripts
+│   └── demo_new_requirements.py   # Requirements demonstration
+├── tests/                         # Unit and integration tests
 ├── model_training.py              # Main training pipeline
 ├── inference.py                   # Streamlit dashboard application
 ├── requirements.txt               # Python dependencies
+├── comprehensive_validation_report.md # Validation documentation
+├── requirements_validation_report.md  # Requirements analysis
 └── README.md                      # This file
 ```
 
