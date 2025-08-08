@@ -198,3 +198,5 @@ desktop.ini
 *.pdf
 *.md
 !README.md
+*.txt
+!requirements.txt
