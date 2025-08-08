@@ -87,6 +87,9 @@ ipywidgets>=7.7.0
 sympy>=1.10.0
 patsy>=0.5.0
 
+# Graph Analysis and Networks
+networkx>=3.1
+
 # UI and Web Applications
 streamlit>=1.28.0
 streamlit-plotly>=0.0.1

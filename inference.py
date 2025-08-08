@@ -48,6 +48,11 @@ except ImportError:
 try:
     from feature_engineering.feature_engineering import PriceElasticityFeatureEngineering
     from training.model_training import PriceElasticityModelTraining
+    import shap
+    from scipy.optimize import minimize
+    HAS_ADVANCED_FEATURES = True
+except ImportError:
+    HAS_ADVANCED_FEATURES = False
     from utils.config_loader import config_loader
 except ImportError as e:
     st.error(f"Error importing modules: {e}")
@@ -188,8 +193,8 @@ class PriceElasticityDashboard:
         if HAS_ADVANCED_UI:
             page = option_menu(
                 "Navigation",
-                ["📊 EDA & Insights", "🤖 Model Inference", "📈 Performance Analytics", "🔍 Training Monitor"],
-                icons=['bar-chart', 'cpu', 'graph-up', 'search'],
+                ["📊 EDA & Insights", "🤖 Model Inference", "🔍 Scenario Analysis", "📈 Performance Analytics", "🔍 Training Monitor"],
+                icons=['bar-chart', 'cpu', 'target', 'graph-up', 'search'],
                 menu_icon="cast",
                 default_index=0,
                 orientation="vertical"
@@ -197,7 +202,7 @@ class PriceElasticityDashboard:
         else:
             page = st.sidebar.selectbox(
                 "Select Page",
-                ["📊 EDA & Insights", "🤖 Model Inference", "📈 Performance Analytics", "🔍 Training Monitor"]
+                ["📊 EDA & Insights", "🤖 Model Inference", "🔍 Scenario Analysis", "📈 Performance Analytics", "🔍 Training Monitor"]
             )
         
         st.sidebar.markdown("---")
@@ -517,6 +522,462 @@ class PriceElasticityDashboard:
         )
         fig.update_xaxis(tickangle=45)
         st.plotly_chart(fig, use_container_width=True)
+    
+    def render_scenario_analysis_page(self):
+        """
+        Render advanced scenario analysis page
+        Following Requirement 7
+        """
+        st.markdown('<h2 class="sub-header">🔍 Scenario Analysis & Simulation</h2>', unsafe_allow_html=True)
+        
+        if not st.session_state.models_loaded:
+            st.warning("⚠️ No trained models found. Please run the training pipeline first.")
+            return
+        
+        # Scenario Analysis Tabs
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "💰 Price Impact Simulation", 
+            "🎯 Strategy Optimization", 
+            "⚔️ Competitive Response", 
+            "📊 Multi-Scenario Analysis"
+        ])
+        
+        with tab1:
+            self._render_price_impact_simulation()
+        
+        with tab2:
+            self._render_strategy_optimization()
+        
+        with tab3:
+            self._render_competitive_response_modeling()
+        
+        with tab4:
+            self._render_multi_scenario_analysis()
+    
+    def _render_price_impact_simulation(self):
+        """Render price impact simulation interface"""
+        st.subheader("💰 Price Change Impact Simulation")
+        
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            st.markdown("**Simulation Parameters**")
+            
+            # Price adjustment range
+            price_adjustment = st.slider(
+                "Price Adjustment (%)", 
+                min_value=-50, max_value=50, value=0, step=5,
+                help="Percentage change in pricing"
+            )
+            
+            # Segment selection
+            segments = ['All', 'Enterprise', 'Mid-Market', 'SMB']
+            selected_segment = st.selectbox("Customer Segment", segments)
+            
+            # Product category
+            categories = ['All', 'Software', 'Hardware', 'Services']
+            selected_category = st.selectbox("Product Category", categories)
+            
+            # Market conditions
+            market_condition = st.selectbox(
+                "Market Conditions", 
+                ['Normal', 'Competitive', 'Economic Downturn', 'Growth Phase']
+            )
+            
+            if st.button("🚀 Run Simulation"):
+                # Generate simulation results
+                simulation_results = self._simulate_price_impact(
+                    price_adjustment, selected_segment, selected_category, market_condition
+                )
+                
+                # Store results in session state
+                st.session_state.simulation_results = simulation_results
+        
+        with col2:
+            if hasattr(st.session_state, 'simulation_results'):
+                results = st.session_state.simulation_results
+                
+                # Display key metrics
+                col2a, col2b, col2c = st.columns(3)
+                
+                with col2a:
+                    st.metric(
+                        "Win Rate Impact", 
+                        f"{results['win_rate_change']:+.1%}",
+                        delta=f"{results['win_rate_change']:+.1%}"
+                    )
+                
+                with col2b:
+                    st.metric(
+                        "Revenue Impact", 
+                        f"{results['revenue_change']:+.1%}",
+                        delta=f"${results['revenue_dollar_impact']:+,.0f}"
+                    )
+                
+                with col2c:
+                    st.metric(
+                        "Margin Impact", 
+                        f"{results['margin_change']:+.1%}",
+                        delta=f"{results['margin_change']:+.1%}"
+                    )
+                
+                # Visualization
+                fig = go.Figure()
+                
+                # Win rate curve
+                fig.add_trace(go.Scatter(
+                    x=results['price_range'],
+                    y=results['win_rates'],
+                    mode='lines+markers',
+                    name='Win Rate',
+                    line=dict(color='blue', width=3)
+                ))
+                
+                # Current point
+                current_idx = len(results['price_range']) // 2
+                fig.add_trace(go.Scatter(
+                    x=[results['price_range'][current_idx]],
+                    y=[results['win_rates'][current_idx]],
+                    mode='markers',
+                    name='Current Position',
+                    marker=dict(color='red', size=12, symbol='diamond')
+                ))
+                
+                fig.update_layout(
+                    title="Win Rate vs Price Adjustment",
+                    xaxis_title="Price Adjustment (%)",
+                    yaxis_title="Win Rate",
+                    height=400
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+    
+    def _render_strategy_optimization(self):
+        """Render strategy optimization interface"""
+        st.subheader("🎯 Pricing Strategy Optimization")
+        
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            st.markdown("**Optimization Objectives**")
+            
+            # Objective selection
+            objective = st.selectbox(
+                "Primary Objective",
+                ['Revenue Maximization', 'Profit Maximization', 'Win Rate Maximization', 'Market Share Growth']
+            )
+            
+            # Constraints
+            st.markdown("**Constraints**")
+            min_win_rate = st.slider("Minimum Win Rate (%)", 0, 100, 30)
+            max_price_increase = st.slider("Max Price Increase (%)", 0, 100, 20)
+            min_margin = st.slider("Minimum Margin (%)", 0, 50, 15)
+            
+            # Risk tolerance
+            risk_tolerance = st.selectbox("Risk Tolerance", ['Conservative', 'Moderate', 'Aggressive'])
+            
+            if st.button("🔍 Optimize Strategy"):
+                optimization_results = self._optimize_pricing_strategy(
+                    objective, min_win_rate, max_price_increase, min_margin, risk_tolerance
+                )
+                st.session_state.optimization_results = optimization_results
+        
+        with col2:
+            if hasattr(st.session_state, 'optimization_results'):
+                results = st.session_state.optimization_results
+                
+                st.success("✅ Optimization Complete!")
+                
+                # Recommended strategy
+                st.markdown("**Recommended Strategy**")
+                st.info(f"""
+                **Optimal Price Adjustment:** {results['optimal_price_change']:+.1%}
+                
+                **Expected Outcomes:**
+                - Win Rate: {results['expected_win_rate']:.1%}
+                - Revenue Change: {results['expected_revenue_change']:+.1%}
+                - Margin: {results['expected_margin']:.1%}
+                
+                **Confidence Level:** {results['confidence_level']}
+                """)
+                
+                # Strategy comparison chart
+                strategies = results['strategy_comparison']
+                
+                fig = go.Figure()
+                
+                fig.add_trace(go.Scatter(
+                    x=[s['price_change'] for s in strategies],
+                    y=[s['expected_return'] for s in strategies],
+                    mode='markers',
+                    marker=dict(
+                        size=[s['risk_score']*20 for s in strategies],
+                        color=[s['win_rate'] for s in strategies],
+                        colorscale='RdYlGn',
+                        showscale=True,
+                        colorbar=dict(title="Win Rate")
+                    ),
+                    text=[f"Strategy {i+1}" for i in range(len(strategies))],
+                    name='Strategies'
+                ))
+                
+                # Highlight optimal strategy
+                optimal = results['optimal_strategy']
+                fig.add_trace(go.Scatter(
+                    x=[optimal['price_change']],
+                    y=[optimal['expected_return']],
+                    mode='markers',
+                    marker=dict(color='gold', size=20, symbol='star'),
+                    name='Optimal Strategy'
+                ))
+                
+                fig.update_layout(
+                    title="Strategy Risk-Return Analysis",
+                    xaxis_title="Price Change (%)",
+                    yaxis_title="Expected Return (%)",
+                    height=400
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+    
+    def _render_competitive_response_modeling(self):
+        """Render competitive response modeling interface"""
+        st.subheader("⚔️ Competitive Response Modeling")
+        
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            st.markdown("**Competitive Scenario**")
+            
+            # Our pricing action
+            our_action = st.selectbox(
+                "Our Pricing Action",
+                ['Price Increase', 'Price Decrease', 'Maintain Price', 'Aggressive Discount']
+            )
+            
+            action_magnitude = st.slider("Action Magnitude (%)", 0, 50, 10)
+            
+            # Competitor characteristics
+            competitor_aggressiveness = st.selectbox(
+                "Competitor Aggressiveness",
+                ['Low', 'Medium', 'High']
+            )
+            
+            market_concentration = st.selectbox(
+                "Market Concentration",
+                ['Fragmented', 'Moderate', 'Concentrated']
+            )
+            
+            # Time horizon
+            time_horizon = st.selectbox(
+                "Analysis Time Horizon",
+                ['1 Month', '3 Months', '6 Months', '1 Year']
+            )
+            
+            if st.button("🎮 Model Competitive Response"):
+                competitive_results = self._model_competitive_response(
+                    our_action, action_magnitude, competitor_aggressiveness, 
+                    market_concentration, time_horizon
+                )
+                st.session_state.competitive_results = competitive_results
+        
+        with col2:
+            if hasattr(st.session_state, 'competitive_results'):
+                results = st.session_state.competitive_results
+                
+                # Market share impact
+                st.markdown("**Market Share Impact**")
+                
+                col2a, col2b, col2c = st.columns(3)
+                
+                with col2a:
+                    st.metric(
+                        "Our Market Share",
+                        f"{results['our_market_share']:.1%}",
+                        delta=f"{results['market_share_change']:+.1%}"
+                    )
+                
+                with col2b:
+                    st.metric(
+                        "Competitor Response",
+                        results['competitor_response'],
+                        delta=f"{results['response_magnitude']:+.1%}"
+                    )
+                
+                with col2c:
+                    st.metric(
+                        "Market Stability",
+                        results['market_stability'],
+                        delta=results['stability_trend']
+                    )
+                
+                # Competitive dynamics visualization
+                fig = make_subplots(
+                    rows=2, cols=1,
+                    subplot_titles=('Market Share Evolution', 'Price Competition Timeline'),
+                    shared_xaxes=True
+                )
+                
+                # Market share over time
+                time_periods = results['time_periods']
+                fig.add_trace(
+                    go.Scatter(
+                        x=time_periods,
+                        y=results['our_share_evolution'],
+                        mode='lines+markers',
+                        name='Our Share',
+                        line=dict(color='blue')
+                    ),
+                    row=1, col=1
+                )
+                
+                fig.add_trace(
+                    go.Scatter(
+                        x=time_periods,
+                        y=results['competitor_share_evolution'],
+                        mode='lines+markers',
+                        name='Competitor Share',
+                        line=dict(color='red')
+                    ),
+                    row=1, col=1
+                )
+                
+                # Price evolution
+                fig.add_trace(
+                    go.Scatter(
+                        x=time_periods,
+                        y=results['our_price_evolution'],
+                        mode='lines+markers',
+                        name='Our Price',
+                        line=dict(color='green')
+                    ),
+                    row=2, col=1
+                )
+                
+                fig.add_trace(
+                    go.Scatter(
+                        x=time_periods,
+                        y=results['competitor_price_evolution'],
+                        mode='lines+markers',
+                        name='Competitor Price',
+                        line=dict(color='orange')
+                    ),
+                    row=2, col=1
+                )
+                
+                fig.update_layout(height=600, title_text="Competitive Dynamics Analysis")
+                st.plotly_chart(fig, use_container_width=True)
+    
+    def _render_multi_scenario_analysis(self):
+        """Render multi-scenario analysis interface"""
+        st.subheader("📊 Multi-Scenario Analysis")
+        
+        # Scenario builder
+        st.markdown("**Scenario Builder**")
+        
+        scenarios = []
+        
+        # Allow users to create multiple scenarios
+        num_scenarios = st.number_input("Number of Scenarios", min_value=1, max_value=5, value=3)
+        
+        for i in range(num_scenarios):
+            with st.expander(f"Scenario {i+1}"):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    price_change = st.slider(f"Price Change % (S{i+1})", -30, 30, 0, key=f"price_{i}")
+                    market_condition = st.selectbox(f"Market Condition (S{i+1})", 
+                                                  ['Normal', 'Recession', 'Growth'], key=f"market_{i}")
+                
+                with col2:
+                    competition = st.selectbox(f"Competition Level (S{i+1})", 
+                                             ['Low', 'Medium', 'High'], key=f"comp_{i}")
+                    demand_shift = st.slider(f"Demand Shift % (S{i+1})", -20, 20, 0, key=f"demand_{i}")
+                
+                with col3:
+                    probability = st.slider(f"Scenario Probability (S{i+1})", 0.0, 1.0, 1.0/num_scenarios, key=f"prob_{i}")
+                
+                scenarios.append({
+                    'name': f'Scenario {i+1}',
+                    'price_change': price_change,
+                    'market_condition': market_condition,
+                    'competition': competition,
+                    'demand_shift': demand_shift,
+                    'probability': probability
+                })
+        
+        if st.button("🔄 Run Multi-Scenario Analysis"):
+            # Normalize probabilities
+            total_prob = sum(s['probability'] for s in scenarios)
+            for scenario in scenarios:
+                scenario['probability'] = scenario['probability'] / total_prob
+            
+            multi_scenario_results = self._run_multi_scenario_analysis(scenarios)
+            st.session_state.multi_scenario_results = multi_scenario_results
+        
+        # Display results
+        if hasattr(st.session_state, 'multi_scenario_results'):
+            results = st.session_state.multi_scenario_results
+            
+            # Expected value analysis
+            st.markdown("**Expected Value Analysis**")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Expected Revenue Change", f"{results['expected_revenue_change']:+.1%}")
+            
+            with col2:
+                st.metric("Revenue at Risk (95%)", f"{results['revenue_at_risk']:+.1%}")
+            
+            with col3:
+                st.metric("Best Case Scenario", f"{results['best_case']:+.1%}")
+            
+            with col4:
+                st.metric("Worst Case Scenario", f"{results['worst_case']:+.1%}")
+            
+            # Scenario comparison
+            scenario_df = pd.DataFrame(results['scenario_details'])
+            
+            fig = px.bar(
+                scenario_df,
+                x='scenario_name',
+                y='expected_outcome',
+                color='probability',
+                title="Scenario Outcomes Comparison",
+                labels={'expected_outcome': 'Expected Revenue Change (%)', 'scenario_name': 'Scenario'}
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Risk analysis
+            st.markdown("**Risk Analysis**")
+            
+            risk_fig = go.Figure()
+            
+            # Add probability distribution
+            risk_fig.add_trace(go.Histogram(
+                x=results['outcome_distribution'],
+                nbinsx=20,
+                name='Outcome Distribution',
+                opacity=0.7
+            ))
+            
+            # Add VaR line
+            risk_fig.add_vline(
+                x=results['revenue_at_risk'],
+                line_dash="dash",
+                line_color="red",
+                annotation_text="Value at Risk (95%)"
+            )
+            
+            risk_fig.update_layout(
+                title="Revenue Change Distribution",
+                xaxis_title="Revenue Change (%)",
+                yaxis_title="Frequency"
+            )
+            
+            st.plotly_chart(risk_fig, use_container_width=True)
     
     def render_inference_page(self):
         """Render model inference page"""
@@ -1024,6 +1485,8 @@ class PriceElasticityDashboard:
                 self.render_eda_page()
             elif page == "🤖 Model Inference":
                 self.render_inference_page()
+            elif page == "🔍 Scenario Analysis":
+                self.render_scenario_analysis_page()
             elif page == "📈 Performance Analytics":
                 self.render_performance_page()
             elif page == "🔍 Training Monitor":
@@ -1032,6 +1495,317 @@ class PriceElasticityDashboard:
         except Exception as e:
             st.error(f"Dashboard error: {str(e)}")
             st.exception(e)
+
+
+    def _simulate_price_impact(self, price_adjustment: float, segment: str, category: str, market_condition: str) -> Dict[str, Any]:
+        """Simulate the impact of price changes on business metrics"""
+        try:
+            # Generate price range around the adjustment
+            price_range = np.linspace(price_adjustment - 20, price_adjustment + 20, 21)
+            
+            # Simulate win rates based on price elasticity
+            base_win_rate = 0.35  # Base win rate
+            elasticity = -0.8 if market_condition == 'Competitive' else -0.5  # Price elasticity
+            
+            win_rates = []
+            for price_change in price_range:
+                # Apply elasticity formula
+                win_rate = base_win_rate * (1 + elasticity * (price_change / 100))
+                
+                # Apply segment adjustments
+                if segment == 'Enterprise':
+                    win_rate *= 1.1  # Less price sensitive
+                elif segment == 'SMB':
+                    win_rate *= 0.9  # More price sensitive
+                
+                # Apply category adjustments
+                if category == 'Software':
+                    win_rate *= 1.05  # Higher margins, less sensitivity
+                elif category == 'Hardware':
+                    win_rate *= 0.95  # More commoditized
+                
+                win_rates.append(max(0.05, min(0.95, win_rate)))  # Bound between 5% and 95%
+            
+            # Calculate current position
+            current_idx = len(price_range) // 2
+            current_win_rate = win_rates[current_idx]
+            new_win_rate = win_rates[np.argmin(np.abs(price_range - price_adjustment))]
+            
+            # Calculate impacts
+            win_rate_change = new_win_rate - current_win_rate
+            revenue_change = price_adjustment / 100 + win_rate_change  # Price effect + volume effect
+            margin_change = price_adjustment / 100 * 0.8  # Assuming 80% flows to margin
+            
+            # Dollar impact (assuming base revenue)
+            base_revenue = 1000000  # $1M base
+            revenue_dollar_impact = base_revenue * revenue_change
+            
+            return {
+                'price_range': price_range.tolist(),
+                'win_rates': win_rates,
+                'win_rate_change': win_rate_change,
+                'revenue_change': revenue_change,
+                'margin_change': margin_change,
+                'revenue_dollar_impact': revenue_dollar_impact,
+                'current_win_rate': current_win_rate,
+                'new_win_rate': new_win_rate
+            }
+        
+        except Exception as e:
+            st.error(f"Simulation failed: {e}")
+            return {}
+    
+    def _optimize_pricing_strategy(self, objective: str, min_win_rate: float, max_price_increase: float, 
+                                 min_margin: float, risk_tolerance: str) -> Dict[str, Any]:
+        """Optimize pricing strategy based on objectives and constraints"""
+        try:
+            # Generate strategy alternatives
+            price_changes = np.linspace(-20, max_price_increase, 20)
+            strategies = []
+            
+            for price_change in price_changes:
+                # Calculate expected outcomes
+                base_win_rate = 0.35
+                elasticity = -0.6
+                
+                win_rate = base_win_rate * (1 + elasticity * (price_change / 100))
+                win_rate = max(0.05, min(0.95, win_rate))
+                
+                # Skip if below minimum win rate
+                if win_rate < min_win_rate / 100:
+                    continue
+                
+                revenue_change = price_change / 100 + (win_rate - base_win_rate)
+                margin = min_margin / 100 + price_change / 100 * 0.8
+                
+                # Skip if below minimum margin
+                if margin < min_margin / 100:
+                    continue
+                
+                # Calculate expected return based on objective
+                if objective == 'Revenue Maximization':
+                    expected_return = revenue_change
+                elif objective == 'Profit Maximization':
+                    expected_return = revenue_change * margin
+                elif objective == 'Win Rate Maximization':
+                    expected_return = win_rate - base_win_rate
+                else:  # Market Share Growth
+                    expected_return = (win_rate - base_win_rate) * 2  # Weight win rate more
+                
+                # Risk score based on price change magnitude
+                risk_score = abs(price_change) / 50  # Normalize to 0-1
+                
+                # Adjust for risk tolerance
+                if risk_tolerance == 'Conservative':
+                    expected_return -= risk_score * 0.5
+                elif risk_tolerance == 'Aggressive':
+                    expected_return += risk_score * 0.2
+                
+                strategies.append({
+                    'price_change': price_change,
+                    'win_rate': win_rate,
+                    'expected_return': expected_return,
+                    'risk_score': risk_score,
+                    'revenue_change': revenue_change,
+                    'margin': margin
+                })
+            
+            if not strategies:
+                return {'error': 'No feasible strategies found with given constraints'}
+            
+            # Find optimal strategy
+            optimal_strategy = max(strategies, key=lambda x: x['expected_return'])
+            
+            # Confidence level based on number of feasible strategies and risk
+            if len(strategies) > 10 and optimal_strategy['risk_score'] < 0.3:
+                confidence_level = 'High'
+            elif len(strategies) > 5:
+                confidence_level = 'Medium'
+            else:
+                confidence_level = 'Low'
+            
+            return {
+                'optimal_price_change': optimal_strategy['price_change'],
+                'expected_win_rate': optimal_strategy['win_rate'],
+                'expected_revenue_change': optimal_strategy['revenue_change'],
+                'expected_margin': optimal_strategy['margin'],
+                'confidence_level': confidence_level,
+                'strategy_comparison': strategies,
+                'optimal_strategy': optimal_strategy
+            }
+        
+        except Exception as e:
+            st.error(f"Optimization failed: {e}")
+            return {}
+    
+    def _model_competitive_response(self, our_action: str, action_magnitude: float, 
+                                  competitor_aggressiveness: str, market_concentration: str, 
+                                  time_horizon: str) -> Dict[str, Any]:
+        """Model competitive response to our pricing actions"""
+        try:
+            # Time periods based on horizon
+            horizon_map = {'1 Month': 1, '3 Months': 3, '6 Months': 6, '1 Year': 12}
+            periods = horizon_map[time_horizon]
+            time_periods = list(range(periods + 1))
+            
+            # Initial market shares
+            our_initial_share = 0.25
+            competitor_initial_share = 0.75
+            
+            # Response parameters
+            aggressiveness_map = {'Low': 0.3, 'Medium': 0.6, 'High': 0.9}
+            concentration_map = {'Fragmented': 0.4, 'Moderate': 0.6, 'Concentrated': 0.8}
+            
+            response_factor = aggressiveness_map[competitor_aggressiveness]
+            concentration_factor = concentration_map[market_concentration]
+            
+            # Simulate evolution over time
+            our_share_evolution = [our_initial_share]
+            competitor_share_evolution = [competitor_initial_share]
+            our_price_evolution = [100]  # Base price index
+            competitor_price_evolution = [100]
+            
+            # Our action impact
+            if our_action == 'Price Decrease':
+                our_price_change = -action_magnitude
+                share_gain = action_magnitude * 0.02  # 2% share gain per 1% price cut
+            elif our_action == 'Price Increase':
+                our_price_change = action_magnitude
+                share_gain = -action_magnitude * 0.015  # 1.5% share loss per 1% price increase
+            elif our_action == 'Aggressive Discount':
+                our_price_change = -action_magnitude * 1.5
+                share_gain = action_magnitude * 0.03
+            else:  # Maintain Price
+                our_price_change = 0
+                share_gain = 0
+            
+            for period in range(1, periods + 1):
+                # Competitor response (delayed and scaled)
+                response_delay = max(1, period - 1)  # Competitors respond with delay
+                competitor_response = our_price_change * response_factor * concentration_factor
+                competitor_response *= min(1, response_delay / 2)  # Gradual response
+                
+                # Update prices
+                our_price = our_price_evolution[-1] * (1 + our_price_change / 100)
+                competitor_price = competitor_price_evolution[-1] * (1 + competitor_response / 100)
+                
+                our_price_evolution.append(our_price)
+                competitor_price_evolution.append(competitor_price)
+                
+                # Update market shares
+                relative_price_advantage = (competitor_price - our_price) / our_price
+                share_change = relative_price_advantage * 0.1  # 10% elasticity
+                
+                new_our_share = our_share_evolution[-1] + share_change
+                new_competitor_share = 1 - new_our_share
+                
+                # Bound shares
+                new_our_share = max(0.05, min(0.95, new_our_share))
+                new_competitor_share = 1 - new_our_share
+                
+                our_share_evolution.append(new_our_share)
+                competitor_share_evolution.append(new_competitor_share)
+            
+            # Determine competitor response type
+            if abs(competitor_response) > action_magnitude * 0.8:
+                response_type = 'Aggressive Match'
+            elif abs(competitor_response) > action_magnitude * 0.4:
+                response_type = 'Moderate Response'
+            else:
+                response_type = 'Limited Response'
+            
+            # Market stability
+            price_volatility = np.std(our_price_evolution + competitor_price_evolution)
+            if price_volatility < 5:
+                stability = 'Stable'
+                stability_trend = '→'
+            elif price_volatility < 15:
+                stability = 'Moderate'
+                stability_trend = '↕'
+            else:
+                stability = 'Volatile'
+                stability_trend = '⚠'
+            
+            return {
+                'our_market_share': our_share_evolution[-1],
+                'market_share_change': our_share_evolution[-1] - our_initial_share,
+                'competitor_response': response_type,
+                'response_magnitude': competitor_response,
+                'market_stability': stability,
+                'stability_trend': stability_trend,
+                'time_periods': time_periods,
+                'our_share_evolution': our_share_evolution,
+                'competitor_share_evolution': competitor_share_evolution,
+                'our_price_evolution': our_price_evolution,
+                'competitor_price_evolution': competitor_price_evolution
+            }
+        
+        except Exception as e:
+            st.error(f"Competitive modeling failed: {e}")
+            return {}
+    
+    def _run_multi_scenario_analysis(self, scenarios: List[Dict]) -> Dict[str, Any]:
+        """Run multi-scenario analysis with risk assessment"""
+        try:
+            scenario_outcomes = []
+            outcome_distribution = []
+            
+            for scenario in scenarios:
+                # Calculate outcome for each scenario
+                price_change = scenario['price_change']
+                demand_shift = scenario['demand_shift']
+                
+                # Base calculations
+                base_revenue_change = price_change / 100
+                
+                # Market condition adjustments
+                if scenario['market_condition'] == 'Recession':
+                    base_revenue_change *= 0.7
+                elif scenario['market_condition'] == 'Growth':
+                    base_revenue_change *= 1.3
+                
+                # Competition adjustments
+                competition_impact = {'Low': 1.1, 'Medium': 1.0, 'High': 0.9}
+                base_revenue_change *= competition_impact[scenario['competition']]
+                
+                # Demand shift
+                base_revenue_change += demand_shift / 100
+                
+                scenario_outcome = {
+                    'scenario_name': scenario['name'],
+                    'expected_outcome': base_revenue_change,
+                    'probability': scenario['probability']
+                }
+                
+                scenario_outcomes.append(scenario_outcome)
+                
+                # Add to distribution (weighted by probability)
+                num_samples = int(scenario['probability'] * 1000)
+                # Add some randomness around the expected outcome
+                scenario_samples = np.random.normal(base_revenue_change, abs(base_revenue_change) * 0.2, num_samples)
+                outcome_distribution.extend(scenario_samples)
+            
+            # Calculate expected value
+            expected_revenue_change = sum(s['expected_outcome'] * s['probability'] for s in scenario_outcomes)
+            
+            # Risk metrics
+            outcome_distribution = np.array(outcome_distribution)
+            revenue_at_risk = np.percentile(outcome_distribution, 5)  # 95% VaR
+            best_case = np.percentile(outcome_distribution, 95)
+            worst_case = np.percentile(outcome_distribution, 5)
+            
+            return {
+                'expected_revenue_change': expected_revenue_change,
+                'revenue_at_risk': revenue_at_risk,
+                'best_case': best_case,
+                'worst_case': worst_case,
+                'scenario_details': scenario_outcomes,
+                'outcome_distribution': outcome_distribution.tolist()
+            }
+        
+        except Exception as e:
+            st.error(f"Multi-scenario analysis failed: {e}")
+            return {}
 
 
 def main():

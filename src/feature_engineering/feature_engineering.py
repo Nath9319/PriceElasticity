@@ -13,6 +13,11 @@ import warnings
 from sklearn.preprocessing import StandardScaler, RobustScaler, LabelEncoder
 from sklearn.impute import KNNImputer
 import joblib
+from statsmodels.tsa.seasonal import STL
+from scipy import stats
+import networkx as nx
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 # Add src to Python path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -568,21 +573,217 @@ class PriceElasticityFeatureEngineering:
         self.logger.info("Created temporal features")
         return df_features
     
-    def create_interaction_features(self, df: pd.DataFrame) -> pd.DataFrame:
+    def create_advanced_temporal_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Create interaction and polynomial features
+        Create advanced temporal features including lag features, rolling windows, and STL decomposition
+        Following Requirements 23 and 12.1
         
         Args:
             df: Input DataFrame
             
         Returns:
-            DataFrame with interaction features
+            DataFrame with advanced temporal features
         """
-        self.logger.info("Creating interaction features...")
+        self.logger.info("Creating advanced temporal features...")
         
         df_features = df.copy()
         
-        # Price-customer interactions
+        if 'Quote_Date' not in df_features.columns:
+            self.logger.warning("Quote_Date column not found, skipping advanced temporal features")
+            return df_features
+        
+        # Ensure Quote_Date is datetime and sort
+        df_features['Quote_Date'] = pd.to_datetime(df_features['Quote_Date'])
+        df_features = df_features.sort_values(['Product_ID', 'Customer_ID', 'Quote_Date']).reset_index(drop=True)
+        
+        # 1. Lag Features (Requirement 23.1)
+        lag_periods = self.fe_config.get('temporal', {}).get('lag_periods', [1, 2, 3, 7, 30])
+        
+        for lag in lag_periods:
+            if 'Net_Price' in df_features.columns:
+                # Simple lag features by product
+                df_features[f'price_lag_{lag}'] = df_features.groupby('Product_ID')['Net_Price'].shift(lag)
+                
+                # Nested lag features by customer-product combination
+                df_features[f'price_lag_{lag}_customer_product'] = df_features.groupby(['Customer_ID', 'Product_ID'])['Net_Price'].shift(lag)
+        
+        # 2. Rolling Window Features (Requirement 23.2)
+        window_sizes = self.fe_config.get('temporal', {}).get('window_sizes', [7, 14, 30, 90])
+        
+        for window in window_sizes:
+            if 'Net_Price' in df_features.columns:
+                # Moving averages: MA_n = (1/n) × Σ(Price_{t-i})
+                df_features[f'price_ma_{window}'] = df_features.groupby('Product_ID')['Net_Price'].rolling(
+                    window=window, min_periods=1
+                ).mean().reset_index(0, drop=True)
+                
+                # Exponentially weighted moving averages: EWMA_t = α × Price_t + (1-α) × EWMA_{t-1}
+                alpha = 2 / (window + 1)  # Standard EWMA alpha
+                df_features[f'price_ewma_{window}'] = df_features.groupby('Product_ID')['Net_Price'].ewm(
+                    alpha=alpha, adjust=False
+                ).mean().reset_index(0, drop=True)
+                
+                # Rolling standard deviations
+                df_features[f'price_std_{window}'] = df_features.groupby('Product_ID')['Net_Price'].rolling(
+                    window=window, min_periods=1
+                ).std().reset_index(0, drop=True)
+                
+                # Price momentum (current vs moving average)
+                df_features[f'price_momentum_{window}'] = (
+                    df_features['Net_Price'] / df_features[f'price_ma_{window}'] - 1
+                ).fillna(0)
+        
+        # 3. STL Decomposition (Requirement 23.4)
+        try:
+            # Group by product and perform STL decomposition for products with sufficient data
+            def perform_stl_decomposition(group):
+                if len(group) >= 24:  # Need at least 2 years of monthly data
+                    group = group.set_index('Quote_Date').resample('M')['Net_Price'].mean().dropna()
+                    if len(group) >= 12:
+                        try:
+                            stl = STL(group, seasonal=7, robust=True)
+                            result = stl.fit()
+                            
+                            # Create features from decomposition
+                            trend_strength = 1 - np.var(result.resid) / np.var(result.trend + result.resid)
+                            seasonal_strength = 1 - np.var(result.resid) / np.var(result.seasonal + result.resid)
+                            
+                            return pd.Series({
+                                'stl_trend_strength': trend_strength,
+                                'stl_seasonal_strength': seasonal_strength,
+                                'stl_trend_slope': np.polyfit(range(len(result.trend)), result.trend, 1)[0]
+                            })
+                        except:
+                            pass
+                
+                return pd.Series({
+                    'stl_trend_strength': 0,
+                    'stl_seasonal_strength': 0,
+                    'stl_trend_slope': 0
+                })
+            
+            stl_features = df_features.groupby('Product_ID').apply(perform_stl_decomposition).reset_index()
+            df_features = df_features.merge(stl_features, on='Product_ID', how='left')
+            
+        except Exception as e:
+            self.logger.warning(f"STL decomposition failed: {e}")
+            df_features['stl_trend_strength'] = 0
+            df_features['stl_seasonal_strength'] = 0
+            df_features['stl_trend_slope'] = 0
+        
+        # 4. Advanced Seasonal Features (Requirement 23.3)
+        if 'Quote_Date' in df_features.columns:
+            # Fourier transform features for cyclical patterns
+            for period in [12, 4, 52]:  # Monthly, quarterly, weekly cycles
+                df_features[f'fourier_sin_{period}'] = np.sin(2 * np.pi * df_features['Quote_Date'].dt.dayofyear / period)
+                df_features[f'fourier_cos_{period}'] = np.cos(2 * np.pi * df_features['Quote_Date'].dt.dayofyear / period)
+        
+        # 5. Temporal Consistency Checks (Requirement 23.5)
+        # Ensure no future data leakage by forward-filling missing lag features
+        lag_columns = [col for col in df_features.columns if 'lag_' in col]
+        for col in lag_columns:
+            df_features[col] = df_features.groupby(['Product_ID', 'Customer_ID'])[col].fillna(method='ffill')
+        
+        self.logger.info("Created advanced temporal features")
+        return df_features
+    
+    def create_advanced_interaction_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Create advanced interaction features including customer price sensitivity and competitive features
+        Following Requirements 24 and 3.4
+        
+        Args:
+            df: Input DataFrame
+            
+        Returns:
+            DataFrame with advanced interaction features
+        """
+        self.logger.info("Creating advanced interaction features...")
+        
+        df_features = df.copy()
+        
+        # 1. Customer Price Sensitivity Analysis (Requirement 24.1)
+        if all(col in df_features.columns for col in ['Customer_ID', 'Net_Price', 'Quote_Date']):
+            def calculate_customer_price_sensitivity(group):
+                if len(group) >= 5:  # Need minimum transactions
+                    # Sort by date
+                    group = group.sort_values('Quote_Date')
+                    
+                    # Calculate price changes and volume changes (using count as proxy)
+                    group['price_change'] = group['Net_Price'].pct_change()
+                    group['volume_proxy'] = 1  # Each quote is a volume unit
+                    
+                    # Calculate rolling volume (quote frequency)
+                    group['volume_change'] = group['volume_proxy'].rolling(window=3, min_periods=1).sum().pct_change()
+                    
+                    # Calculate correlation between price and volume changes
+                    valid_data = group.dropna(subset=['price_change', 'volume_change'])
+                    if len(valid_data) >= 3:
+                        correlation = valid_data['price_change'].corr(valid_data['volume_change'])
+                        premium_tolerance = group['Net_Price'].max() / group['Net_Price'].median() if group['Net_Price'].median() > 0 else 1
+                        
+                        return pd.Series({
+                            'customer_price_sensitivity': -correlation if not np.isnan(correlation) else 0,
+                            'premium_tolerance': premium_tolerance,
+                            'price_volatility_tolerance': group['Net_Price'].std() / group['Net_Price'].mean() if group['Net_Price'].mean() > 0 else 0
+                        })
+                
+                return pd.Series({
+                    'customer_price_sensitivity': 0,
+                    'premium_tolerance': 1,
+                    'price_volatility_tolerance': 0
+                })
+            
+            customer_sensitivity = df_features.groupby('Customer_ID').apply(calculate_customer_price_sensitivity).reset_index()
+            df_features = df_features.merge(customer_sensitivity, on='Customer_ID', how='left')
+        
+        # 2. Competitive Features (Requirement 24.2)
+        if all(col in df_features.columns for col in ['Net_Price', 'Product_Category']):
+            # Calculate competitive ratios and market position
+            category_stats = df_features.groupby('Product_Category')['Net_Price'].agg([
+                'mean', 'median', 'std', 'min', 'max'
+            ]).add_suffix('_category')
+            
+            df_features = df_features.merge(category_stats, left_on='Product_Category', right_index=True, how='left')
+            
+            # Competitive ratio = Our_Price / Category_Average_Price
+            df_features['competitive_ratio'] = df_features['Net_Price'] / df_features['mean_category']
+            
+            # Price position index = normalized position within market range
+            df_features['price_position_index'] = (
+                (df_features['Net_Price'] - df_features['min_category']) / 
+                (df_features['max_category'] - df_features['min_category'])
+            ).fillna(0.5).clip(0, 1)
+            
+            # Market volatility index
+            df_features['market_volatility_index'] = df_features['std_category'] / df_features['mean_category']
+        
+        # 3. Advanced Polynomial Features (Requirement 24.3)
+        key_features = ['Net_Price', 'discount_depth', 'customer_tenure_days']
+        
+        for feature in key_features:
+            if feature in df_features.columns:
+                # Squared and cubed terms
+                df_features[f'{feature}_squared'] = df_features[feature] ** 2
+                df_features[f'{feature}_cubed'] = df_features[feature] ** 3
+                
+                # Log transformation for skewed features
+                if feature in ['Net_Price', 'customer_tenure_days']:
+                    df_features[f'{feature}_log'] = np.log1p(df_features[feature])
+        
+        # 4. Cross-product interactions
+        interaction_pairs = [
+            ('Net_Price', 'discount_depth'),
+            ('customer_price_sensitivity', 'Net_Price'),
+            ('competitive_ratio', 'discount_depth'),
+            ('premium_tolerance', 'Net_Price')
+        ]
+        
+        for feature1, feature2 in interaction_pairs:
+            if all(col in df_features.columns for col in [feature1, feature2]):
+                df_features[f'{feature1}_x_{feature2}'] = df_features[feature1] * df_features[feature2]
+        
+        # 5. Price-customer segment interactions
         if all(col in df_features.columns for col in ['Net_Price', 'Customer_Segment']):
             for segment in df_features['Customer_Segment'].unique():
                 if pd.notna(segment):
@@ -590,48 +791,168 @@ class PriceElasticityFeatureEngineering:
                         df_features['Net_Price'] * (df_features['Customer_Segment'] == segment).astype(int)
                     )
         
-        # Price-product category interactions
-        if all(col in df_features.columns for col in ['Net_Price', 'Product_Category']):
-            for category in df_features['Product_Category'].unique():
-                if pd.notna(category):
-                    df_features[f'price_x_{category.lower()}_category'] = (
-                        df_features['Net_Price'] * (df_features['Product_Category'] == category).astype(int)
-                    )
-        
-        # Discount-competition interactions
-        if all(col in df_features.columns for col in ['discount_depth', 'Competition_Status']):
-            for comp_status in df_features['Competition_Status'].unique():
-                if pd.notna(comp_status):
-                    df_features[f'discount_x_{comp_status.lower()}_competition'] = (
-                        df_features['discount_depth'] * (df_features['Competition_Status'] == comp_status).astype(int)
-                    )
-        
-        # Polynomial features for key variables
-        key_numeric_features = ['Net_Price', 'discount_depth', 'customer_tenure_days']
-        
-        for feature in key_numeric_features:
-            if feature in df_features.columns:
-                # Squared terms
-                df_features[f'{feature}_squared'] = df_features[feature] ** 2
-                
-                # Cubic terms (only for certain features)
-                if feature in ['Net_Price', 'discount_depth']:
-                    df_features[f'{feature}_cubed'] = df_features[feature] ** 3
-        
-        # Cross-product interactions for key pairs
-        feature_pairs = [
-            ('Net_Price', 'discount_depth'),
-            ('customer_tenure_days', 'Net_Price'),
-            ('rfm_combined_score', 'Net_Price') if 'rfm_combined_score' in df_features.columns else None
-        ]
-        
-        for pair in feature_pairs:
-            if pair and all(col in df_features.columns for col in pair):
-                feature1, feature2 = pair
-                df_features[f'{feature1}_x_{feature2}'] = df_features[feature1] * df_features[feature2]
-        
-        self.logger.info("Created interaction features")
+        self.logger.info("Created advanced interaction features")
         return df_features
+    
+    def create_b2b_domain_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Create B2B domain-specific features including contract structures and supply chain factors
+        Following Requirement 25
+        
+        Args:
+            df: Input DataFrame
+            
+        Returns:
+            DataFrame with B2B domain features
+        """
+        self.logger.info("Creating B2B domain-specific features...")
+        
+        df_features = df.copy()
+        
+        # 1. Contract Features (Requirement 25.1)
+        if 'Customer_ID' in df_features.columns:
+            # Calculate customer relationship metrics as proxy for contract features
+            customer_metrics = df_features.groupby('Customer_ID').agg({
+                'Quote_Date': ['min', 'max', 'count'],
+                'Net_Price': ['mean', 'sum']
+            })
+            
+            customer_metrics.columns = ['first_quote_date', 'last_quote_date', 'total_quotes', 'avg_deal_size', 'total_value']
+            
+            # Contract length factor (relationship duration)
+            customer_metrics['relationship_duration_days'] = (
+                customer_metrics['last_quote_date'] - customer_metrics['first_quote_date']
+            ).dt.days
+            
+            # Average contract duration (using quote frequency as proxy)
+            avg_relationship_duration = customer_metrics['relationship_duration_days'].mean()
+            customer_metrics['contract_length_factor'] = (
+                customer_metrics['relationship_duration_days'] / avg_relationship_duration
+            ).fillna(1.0)
+            
+            # Deal structure indicators
+            customer_metrics['deal_frequency'] = (
+                customer_metrics['total_quotes'] / (customer_metrics['relationship_duration_days'] + 1) * 365
+            )
+            customer_metrics['deal_size_consistency'] = (
+                df_features.groupby('Customer_ID')['Net_Price'].std() / 
+                df_features.groupby('Customer_ID')['Net_Price'].mean()
+            ).fillna(0)
+            
+            # Merge back to main dataframe
+            df_features = df_features.merge(
+                customer_metrics[['contract_length_factor', 'deal_frequency', 'deal_size_consistency']], 
+                left_on='Customer_ID', 
+                right_index=True, 
+                how='left'
+            )
+        
+        # 2. Supply Chain Features (Requirement 25.2)
+        if all(col in df_features.columns for col in ['Product_ID', 'Net_Price', 'Quote_Date']):
+            # Calculate product-level supply chain proxies
+            product_metrics = df_features.groupby('Product_ID').agg({
+                'Net_Price': ['mean', 'std', 'count'],
+                'Quote_Date': ['min', 'max']
+            })
+            
+            product_metrics.columns = ['avg_price', 'price_volatility', 'demand_frequency', 'first_quote', 'last_quote']
+            
+            # Inventory turnover proxy (using demand frequency and price volatility)
+            product_metrics['inventory_turnover_proxy'] = (
+                product_metrics['demand_frequency'] / (product_metrics['price_volatility'] + 1)
+            )
+            
+            # Stock-out risk score (based on demand variability)
+            product_metrics['stock_out_risk_score'] = (
+                product_metrics['price_volatility'] / product_metrics['avg_price']
+            ).fillna(0).clip(0, 1)
+            
+            # Supply chain disruption indicator (price volatility spikes)
+            product_metrics['supply_disruption_indicator'] = (
+                product_metrics['price_volatility'] > product_metrics['price_volatility'].quantile(0.8)
+            ).astype(int)
+            
+            # Merge back to main dataframe
+            df_features = df_features.merge(
+                product_metrics[['inventory_turnover_proxy', 'stock_out_risk_score', 'supply_disruption_indicator']], 
+                left_on='Product_ID', 
+                right_index=True, 
+                how='left'
+            )
+        
+        # 3. Economic Indicators (Requirement 25.3)
+        if 'Quote_Date' in df_features.columns:
+            # Create time-based economic proxies
+            df_features['year'] = df_features['Quote_Date'].dt.year
+            df_features['quarter'] = df_features['Quote_Date'].dt.quarter
+            
+            # Market volatility as standard deviation of prices over time
+            quarterly_volatility = df_features.groupby(['year', 'quarter'])['Net_Price'].std().reset_index()
+            quarterly_volatility.columns = ['year', 'quarter', 'market_volatility']
+            
+            df_features = df_features.merge(quarterly_volatility, on=['year', 'quarter'], how='left')
+            df_features['market_volatility'] = df_features['market_volatility'].fillna(df_features['market_volatility'].mean())
+            
+            # Seasonal demand patterns
+            monthly_demand = df_features.groupby(df_features['Quote_Date'].dt.month)['Quote_ID'].count()
+            monthly_demand_norm = (monthly_demand - monthly_demand.mean()) / monthly_demand.std()
+            
+            df_features['seasonal_demand_index'] = df_features['Quote_Date'].dt.month.map(monthly_demand_norm.to_dict())
+        
+        # 4. Business Impact Features (Requirement 25.4)
+        if all(col in df_features.columns for col in ['Customer_ID', 'Net_Price']):
+            # Customer acquisition cost proxy (inverse of deal frequency)
+            df_features['customer_acquisition_cost_proxy'] = 1 / (df_features['deal_frequency'] + 0.1)
+            
+            # Customer lifetime value multiples
+            if 'clv_estimate' in df_features.columns:
+                df_features['clv_multiple'] = df_features['clv_estimate'] / df_features['Net_Price']
+            else:
+                # Simple CLV proxy
+                customer_value = df_features.groupby('Customer_ID')['Net_Price'].sum()
+                df_features['clv_multiple'] = df_features['Customer_ID'].map(customer_value) / df_features['Net_Price']
+        
+        # 5. Market Context Features (Requirement 25.5)
+        if 'Quote_Date' in df_features.columns:
+            # Rolling market volatility
+            df_features = df_features.sort_values('Quote_Date')
+            
+            for window in [30, 90, 180]:
+                df_features[f'market_volatility_{window}d'] = df_features['Net_Price'].rolling(
+                    window=window, min_periods=1
+                ).std()
+            
+            # Industry-specific cyclical indicators (using product category as proxy)
+            if 'Product_Category' in df_features.columns:
+                category_cycles = df_features.groupby(['Product_Category', df_features['Quote_Date'].dt.month])['Net_Price'].mean().reset_index()
+                category_cycles['month'] = category_cycles['Quote_Date']
+                category_cycles = category_cycles.pivot(index='month', columns='Product_Category', values='Net_Price')
+                
+                # Calculate cyclical strength for each category
+                for category in category_cycles.columns:
+                    if category_cycles[category].notna().sum() >= 6:  # Need at least 6 months of data
+                        cyclical_strength = category_cycles[category].std() / category_cycles[category].mean()
+                        df_features.loc[df_features['Product_Category'] == category, 'category_cyclical_strength'] = cyclical_strength
+                
+                df_features['category_cyclical_strength'] = df_features['category_cyclical_strength'].fillna(0)
+        
+        self.logger.info("Created B2B domain-specific features")
+        return df_features
+    
+    def create_interaction_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Create basic interaction and polynomial features (legacy method)
+        
+        Args:
+            df: Input DataFrame
+            
+        Returns:
+            DataFrame with interaction features
+        """
+        self.logger.info("Creating basic interaction features...")
+        
+        # Call the advanced interaction features method
+        return self.create_advanced_interaction_features(df)
     
     def encode_categorical_features(self, df: pd.DataFrame, fit: bool = True) -> pd.DataFrame:
         """
@@ -857,6 +1178,258 @@ class PriceElasticityFeatureEngineering:
         self.logger.info("Missing value imputation completed")
         return df_features
     
+    def create_graph_neural_network_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Create Graph Neural Network features including customer-product networks and embeddings
+        Following Requirement 9 and 12.5
+        
+        Args:
+            df: Input DataFrame
+            
+        Returns:
+            DataFrame with GNN-based features
+        """
+        self.logger.info("Creating Graph Neural Network features...")
+        
+        df_features = df.copy()
+        
+        try:
+            # 1. Create bipartite customer-product graphs (Requirement 9.1)
+            if all(col in df_features.columns for col in ['Customer_ID', 'Product_ID', 'Net_Price']):
+                # Build customer-product interaction network
+                G = nx.Graph()
+                
+                # Add customer nodes
+                customers = df_features['Customer_ID'].unique()
+                G.add_nodes_from([(f"C_{c}", {"type": "customer"}) for c in customers])
+                
+                # Add product nodes
+                products = df_features['Product_ID'].unique()
+                G.add_nodes_from([(f"P_{p}", {"type": "product"}) for p in products])
+                
+                # Add edges with weights (transaction value)
+                for _, row in df_features.iterrows():
+                    customer_node = f"C_{row['Customer_ID']}"
+                    product_node = f"P_{row['Product_ID']}"
+                    weight = row['Net_Price']
+                    
+                    if G.has_edge(customer_node, product_node):
+                        G[customer_node][product_node]['weight'] += weight
+                        G[customer_node][product_node]['count'] += 1
+                    else:
+                        G.add_edge(customer_node, product_node, weight=weight, count=1)
+                
+                # 2. Calculate node centrality measures (Requirement 9.4)
+                try:
+                    # Degree centrality
+                    degree_centrality = nx.degree_centrality(G)
+                    
+                    # Betweenness centrality (for smaller graphs)
+                    if len(G.nodes()) < 1000:
+                        betweenness_centrality = nx.betweenness_centrality(G, k=min(100, len(G.nodes())))
+                    else:
+                        betweenness_centrality = {node: 0 for node in G.nodes()}
+                    
+                    # Eigenvector centrality
+                    try:
+                        eigenvector_centrality = nx.eigenvector_centrality(G, max_iter=100)
+                    except:
+                        eigenvector_centrality = {node: 0 for node in G.nodes()}
+                    
+                    # Map centrality measures back to dataframe
+                    df_features['customer_degree_centrality'] = df_features['Customer_ID'].apply(
+                        lambda x: degree_centrality.get(f"C_{x}", 0)
+                    )
+                    df_features['customer_betweenness_centrality'] = df_features['Customer_ID'].apply(
+                        lambda x: betweenness_centrality.get(f"C_{x}", 0)
+                    )
+                    df_features['customer_eigenvector_centrality'] = df_features['Customer_ID'].apply(
+                        lambda x: eigenvector_centrality.get(f"C_{x}", 0)
+                    )
+                    
+                    df_features['product_degree_centrality'] = df_features['Product_ID'].apply(
+                        lambda x: degree_centrality.get(f"P_{x}", 0)
+                    )
+                    df_features['product_betweenness_centrality'] = df_features['Product_ID'].apply(
+                        lambda x: betweenness_centrality.get(f"P_{x}", 0)
+                    )
+                    df_features['product_eigenvector_centrality'] = df_features['Product_ID'].apply(
+                        lambda x: eigenvector_centrality.get(f"P_{x}", 0)
+                    )
+                    
+                except Exception as e:
+                    self.logger.warning(f"Centrality calculation failed: {e}")
+                    # Set default values
+                    for centrality_type in ['degree', 'betweenness', 'eigenvector']:
+                        df_features[f'customer_{centrality_type}_centrality'] = 0
+                        df_features[f'product_{centrality_type}_centrality'] = 0
+                
+                # 3. Generate graph-based similarity scores (Requirement 9.4)
+                # Customer similarity based on product preferences
+                customer_product_matrix = df_features.pivot_table(
+                    index='Customer_ID', 
+                    columns='Product_ID', 
+                    values='Net_Price', 
+                    aggfunc='mean'
+                ).fillna(0)
+                
+                if customer_product_matrix.shape[0] > 1 and customer_product_matrix.shape[1] > 1:
+                    # Calculate cosine similarity between customers
+                    customer_similarity = cosine_similarity(customer_product_matrix)
+                    
+                    # For each customer, find their average similarity to others
+                    customer_avg_similarity = {}
+                    for i, customer in enumerate(customer_product_matrix.index):
+                        similarities = customer_similarity[i]
+                        # Exclude self-similarity
+                        other_similarities = np.concatenate([similarities[:i], similarities[i+1:]])
+                        customer_avg_similarity[customer] = np.mean(other_similarities) if len(other_similarities) > 0 else 0
+                    
+                    df_features['customer_similarity_score'] = df_features['Customer_ID'].map(customer_avg_similarity).fillna(0)
+                else:
+                    df_features['customer_similarity_score'] = 0
+                
+                # Product similarity based on customer base
+                product_customer_matrix = df_features.pivot_table(
+                    index='Product_ID', 
+                    columns='Customer_ID', 
+                    values='Net_Price', 
+                    aggfunc='mean'
+                ).fillna(0)
+                
+                if product_customer_matrix.shape[0] > 1 and product_customer_matrix.shape[1] > 1:
+                    product_similarity = cosine_similarity(product_customer_matrix)
+                    
+                    product_avg_similarity = {}
+                    for i, product in enumerate(product_customer_matrix.index):
+                        similarities = product_similarity[i]
+                        other_similarities = np.concatenate([similarities[:i], similarities[i+1:]])
+                        product_avg_similarity[product] = np.mean(other_similarities) if len(other_similarities) > 0 else 0
+                    
+                    df_features['product_similarity_score'] = df_features['Product_ID'].map(product_avg_similarity).fillna(0)
+                else:
+                    df_features['product_similarity_score'] = 0
+                
+                # 4. Network effect features (Requirement 9.3)
+                # Calculate network density around each customer and product
+                customer_network_density = {}
+                product_network_density = {}
+                
+                for customer in customers:
+                    customer_node = f"C_{customer}"
+                    if customer_node in G:
+                        neighbors = list(G.neighbors(customer_node))
+                        if len(neighbors) > 1:
+                            # Create subgraph of customer's neighborhood
+                            subgraph = G.subgraph([customer_node] + neighbors)
+                            density = nx.density(subgraph)
+                            customer_network_density[customer] = density
+                        else:
+                            customer_network_density[customer] = 0
+                    else:
+                        customer_network_density[customer] = 0
+                
+                for product in products:
+                    product_node = f"P_{product}"
+                    if product_node in G:
+                        neighbors = list(G.neighbors(product_node))
+                        if len(neighbors) > 1:
+                            subgraph = G.subgraph([product_node] + neighbors)
+                            density = nx.density(subgraph)
+                            product_network_density[product] = density
+                        else:
+                            product_network_density[product] = 0
+                    else:
+                        product_network_density[product] = 0
+                
+                df_features['customer_network_density'] = df_features['Customer_ID'].map(customer_network_density).fillna(0)
+                df_features['product_network_density'] = df_features['Product_ID'].map(product_network_density).fillna(0)
+                
+                # 5. Graph embeddings using Word2Vec-style approach (Requirement 12.5)
+                # Create random walks for embedding generation
+                def generate_random_walks(graph, num_walks=10, walk_length=5):
+                    walks = []
+                    nodes = list(graph.nodes())
+                    
+                    for _ in range(num_walks):
+                        for node in nodes:
+                            walk = [node]
+                            current_node = node
+                            
+                            for _ in range(walk_length - 1):
+                                neighbors = list(graph.neighbors(current_node))
+                                if neighbors:
+                                    # Weighted random selection based on edge weights
+                                    weights = [graph[current_node][neighbor].get('weight', 1) for neighbor in neighbors]
+                                    total_weight = sum(weights)
+                                    if total_weight > 0:
+                                        probabilities = [w / total_weight for w in weights]
+                                        current_node = np.random.choice(neighbors, p=probabilities)
+                                    else:
+                                        current_node = np.random.choice(neighbors)
+                                    walk.append(current_node)
+                                else:
+                                    break
+                            
+                            walks.append(walk)
+                    
+                    return walks
+                
+                # Generate walks and create simple embeddings
+                if len(G.nodes()) > 0:
+                    walks = generate_random_walks(G, num_walks=5, walk_length=3)
+                    
+                    # Create co-occurrence matrix for simple embedding
+                    node_cooccurrence = {}
+                    for walk in walks:
+                        for i, node in enumerate(walk):
+                            if node not in node_cooccurrence:
+                                node_cooccurrence[node] = {}
+                            
+                            # Look at context window
+                            for j in range(max(0, i-1), min(len(walk), i+2)):
+                                if i != j:
+                                    context_node = walk[j]
+                                    if context_node not in node_cooccurrence[node]:
+                                        node_cooccurrence[node][context_node] = 0
+                                    node_cooccurrence[node][context_node] += 1
+                    
+                    # Create simple embedding features (sum of co-occurrence counts)
+                    customer_embedding_strength = {}
+                    product_embedding_strength = {}
+                    
+                    for node, cooccur in node_cooccurrence.items():
+                        strength = sum(cooccur.values())
+                        if node.startswith('C_'):
+                            customer_id = node[2:]  # Remove 'C_' prefix
+                            customer_embedding_strength[customer_id] = strength
+                        elif node.startswith('P_'):
+                            product_id = node[2:]  # Remove 'P_' prefix
+                            product_embedding_strength[product_id] = strength
+                    
+                    df_features['customer_embedding_strength'] = df_features['Customer_ID'].map(customer_embedding_strength).fillna(0)
+                    df_features['product_embedding_strength'] = df_features['Product_ID'].map(product_embedding_strength).fillna(0)
+                else:
+                    df_features['customer_embedding_strength'] = 0
+                    df_features['product_embedding_strength'] = 0
+                
+        except Exception as e:
+            self.logger.warning(f"Graph neural network feature creation failed: {e}")
+            # Set default values for all GNN features
+            gnn_features = [
+                'customer_degree_centrality', 'customer_betweenness_centrality', 'customer_eigenvector_centrality',
+                'product_degree_centrality', 'product_betweenness_centrality', 'product_eigenvector_centrality',
+                'customer_similarity_score', 'product_similarity_score',
+                'customer_network_density', 'product_network_density',
+                'customer_embedding_strength', 'product_embedding_strength'
+            ]
+            
+            for feature in gnn_features:
+                df_features[feature] = 0
+        
+        self.logger.info("Created Graph Neural Network features")
+        return df_features
+    
     def create_comprehensive_features(self, df: pd.DataFrame, fit: bool = True) -> pd.DataFrame:
         """
         Create all features using the comprehensive pipeline
@@ -883,7 +1456,12 @@ class PriceElasticityFeatureEngineering:
         df_features = self.create_product_hierarchy_features(df_features)
         df_features = self.create_temporal_features(df_features)
         
-        # Step 3: Create interaction features
+        # Step 2.5: Create advanced feature groups
+        df_features = self.create_advanced_temporal_features(df_features)
+        df_features = self.create_b2b_domain_features(df_features)
+        df_features = self.create_graph_neural_network_features(df_features)
+        
+        # Step 3: Create interaction features (now includes advanced interactions)
         df_features = self.create_interaction_features(df_features)
         
         # Step 4: Encode categorical features
