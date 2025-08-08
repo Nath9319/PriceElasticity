@@ -1,0 +1,88 @@
+# Core Data Science Libraries
+pandas>=1.5.0
+numpy>=1.21.0
+scipy>=1.9.0
+scikit-learn>=1.1.0
+
+# Machine Learning Libraries
+xgboost>=1.6.0
+lightgbm>=3.3.0
+catboost>=1.0.0
+optuna>=3.0.0
+
+# Deep Learning and Neural Networks
+torch>=1.12.0
+torch-geometric>=2.1.0
+pytorch-lightning>=1.7.0
+transformers>=4.20.0
+
+# Bayesian and Causal ML
+pymc>=4.0.0
+arviz>=0.12.0
+econml>=0.13.0
+dowhy>=0.8.0
+causalnex>=0.11.0
+
+# Graph Neural Networks
+torch-scatter>=2.0.9
+torch-sparse>=0.6.15
+torch-cluster>=1.6.0
+
+# Time Series and Forecasting
+statsmodels>=0.13.0
+sktime>=0.13.0
+prophet>=1.1.0
+
+# Visualization and Plotting
+matplotlib>=3.5.0
+seaborn>=0.11.0
+plotly>=5.10.0
+bokeh>=2.4.0
+altair>=4.2.0
+
+# Model Interpretation and Explainability
+shap>=0.41.0
+lime>=0.2.0
+eli5>=0.13.0
+
+# Data Processing and Feature Engineering
+category-encoders>=2.5.0
+feature-engine>=1.4.0
+imbalanced-learn>=0.9.0
+
+# Hyperparameter Optimization
+hyperopt>=0.2.7
+bayesian-optimization>=1.4.0
+
+# MLOps and Model Management
+mlflow>=1.28.0
+wandb>=0.13.0
+dvc>=2.30.0
+
+# Database and Data Storage
+sqlalchemy>=1.4.0
+psycopg2-binary>=2.9.0
+pymongo>=4.2.0
+
+# Utilities and Configuration
+pyyaml>=6.0
+python-dotenv>=0.20.0
+click>=8.1.0
+tqdm>=4.64.0
+joblib>=1.1.0
+
+# Testing and Quality Assurance
+pytest>=7.1.0
+pytest-cov>=3.0.0
+black>=22.6.0
+flake8>=5.0.0
+mypy>=0.971
+
+# Jupyter and Interactive Development
+jupyter>=1.0.0
+ipykernel>=6.15.0
+ipywidgets>=7.7.0
+
+# Additional Math and Statistics
+sympy>=1.10.0
+patsy>=0.5.0

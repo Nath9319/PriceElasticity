@@ -1,0 +1,268 @@
+# Price Elasticity Modeling Configuration
+
+# Project settings
+project:
+  name: "Price Elasticity Modeling"
+  version: "1.0.0"
+  description: "B2B Price Elasticity Modeling with Causal ML"
+
+# Data settings
+data:
+  datasets_path: "datasets"
+  processed_path: "data/processed"
+  raw_path: "data/raw"
+  
+  # File names (to be updated based on actual dataset files)
+  files:
+    quote_history: "quote_history.csv"
+    sales_history: "sales_history.csv"
+    customer_master: "customer_master.csv"
+    customer_segmentation: "customer_segmentation.csv"
+    product_master: "product_master.csv"
+  
+  # Target variables
+  target_column: "Status"  # Win/Loss for quotes
+  price_columns:
+    - "Net_Price"
+    - "List_Price"
+    - "Offered_Price"
+    - "Discount_Percent"
+    - "Offered_Discount"
+  
+  # Key columns for joins
+  join_keys:
+    customer_id: "Customer_ID"
+    product_id: "Product_ID"
+    quote_id: "Quote_ID"
+
+# Feature Engineering
+feature_engineering:
+  # Price dynamics features
+  price_dynamics:
+    windows: [7, 30, 90]  # Rolling window sizes in days
+    volatility_window: 90
+    price_change_threshold: 0.05
+  
+  # Customer features
+  customer:
+    rfm_quantiles: 5
+    tenure_bins: [0, 90, 365, 730, 1825]  # Days
+    clv_method: "traditional"  # traditional, ml_based
+  
+  # Product features
+  product:
+    velocity_periods: [30, 90, 365]  # Days
+    lifecycle_stages: ["introduction", "growth", "maturity", "decline"]
+  
+  # Temporal features
+  temporal:
+    seasonal_components: ["month", "quarter", "day_of_week"]
+    holiday_effects: true
+    trend_components: true
+  
+  # Categorical encoding
+  categorical:
+    high_cardinality_threshold: 50
+    target_encoding_smoothing: 10
+    rare_category_threshold: 0.01
+
+# Model configurations
+models:
+  # Model A: Hierarchical Bayesian
+  hierarchical_bayesian:
+    sampler: "NUTS"
+    chains: 4
+    draws: 2000
+    tune: 1000
+    target_accept: 0.9
+    max_treedepth: 10
+    
+    priors:
+      intercept:
+        mean: 0
+        std: 100
+      slope:
+        mean: 0
+        std: 10
+      group_std:
+        dist: "HalfCauchy"
+        beta: 5
+  
+  # Model B: X-Learner (Causal ML)
+  x_learner:
+    base_models:
+      type: ["lightgbm", "xgboost"]
+      cross_validation_folds: 5
+      hyperparameter_trials: 100
+    
+    dml_folds: 3
+    monte_carlo_iterations: 5
+    confidence_level: 0.95
+    
+    treatment:
+      variable: "Offered_Price"
+      binary_threshold: "median"  # or specific value
+    
+    outcome: "Status"
+  
+  # Model C: Ensemble Methods
+  ensemble:
+    base_models:
+      - "lightgbm"
+      - "xgboost"
+      - "catboost"
+      - "random_forest"
+    
+    meta_learner: "ridge"
+    stacking_cv_folds: 5
+    
+    # Model diversity requirements
+    max_correlation: 0.8
+    min_individual_score: 0.6
+
+# Hyperparameter optimization
+hyperparameter_optimization:
+  framework: "optuna"
+  
+  # Optuna settings
+  optuna:
+    n_trials: 200
+    timeout: 7200  # 2 hours
+    sampler: "TPE"
+    pruner: "MedianPruner"
+    
+    # Early stopping
+    early_stopping_patience: 20
+    min_trials_for_pruning: 10
+  
+  # XGBoost parameter ranges
+  xgboost:
+    max_depth: [4, 8]
+    learning_rate: [0.05, 0.15]
+    n_estimators: [100, 2000]
+    subsample: [0.5, 1.0]
+    colsample_bytree: [0.3, 1.0]
+    min_child_weight: [3, 7]
+    gamma: [0, 5]
+    reg_alpha: [0, 1]
+    reg_lambda: [0, 10]
+  
+  # LightGBM parameter ranges  
+  lightgbm:
+    num_leaves: [15, 255]
+    learning_rate: [0.01, 0.3]
+    n_estimators: [100, 2000]
+    subsample: [0.5, 1.0]
+    colsample_bytree: [0.3, 1.0]
+    min_child_samples: [10, 100]
+    reg_alpha: [0, 10]
+    reg_lambda: [0, 10]
+
+# Validation settings
+validation:
+  # Time series cross-validation
+  time_series_cv:
+    n_splits: 5
+    test_size_days: 30
+    gap_days: 7
+    step_size_days: 7
+  
+  # Performance metrics
+  metrics:
+    classification: ["auc", "precision", "recall", "f1", "log_loss"]
+    regression: ["rmse", "mae", "mape", "r2"]
+    business: ["revenue_lift", "margin_improvement", "win_rate_accuracy"]
+  
+  # Model selection criteria
+  selection_criteria:
+    primary_metric: "auc"
+    stability_weight: 0.3
+    interpretability_weight: 0.2
+
+# Business logic
+business:
+  # Price optimization
+  price_optimization:
+    profit_margin_target: 0.2
+    win_probability_threshold: 0.3
+    competitive_positioning_weight: 0.25
+  
+  # Floor price methods
+  floor_price:
+    method_1: "win_probability_threshold"  # 30% win prob threshold
+    method_2: "regression_lower_bound"     # predicted_price - 1*std
+    confidence_interval: 0.95
+  
+  # Stretch price optimization
+  stretch_price:
+    optimization_method: "scipy_minimize"
+    objective: "expected_profit"
+    constraints:
+      max_price_ratio: 1.5  # vs list price
+      min_win_probability: 0.05
+  
+  # Segments for modeling
+  segments:
+    customer_segments: ["SMB", "Mid-Market", "Enterprise", "Strategic"]
+    product_categories: ["Hardware", "Software", "Services", "Support"]
+    regions: ["North America", "Europe", "APAC", "Latin America"]
+
+# Logging and monitoring
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  handlers:
+    console: true
+    file: true
+  
+  log_files:
+    main: "logs/price_elasticity.log"
+    training: "logs/training.log"
+    inference: "logs/inference.log"
+    data_processing: "logs/data_processing.log"
+
+# Paths and outputs
+paths:
+  models: "models"
+  results: "results"
+  plots: "results/plots"
+  reports: "results/reports"
+  
+  # Model artifacts
+  trained_models: "models/trained"
+  model_metadata: "models/metadata"
+  
+  # Results
+  predictions: "results/predictions"
+  evaluations: "results/evaluations"
+  explanations: "results/explanations"
+
+# Computational settings
+compute:
+  n_jobs: -1  # Use all available cores
+  random_state: 42
+  memory_limit_gb: 8
+  
+  # For large datasets
+  batch_processing:
+    enabled: false
+    batch_size: 10000
+  
+  # GPU settings (if available)
+  gpu:
+    enabled: false
+    device: "cuda:0"
+
+# Visualization settings
+visualization:
+  style: "seaborn"
+  figure_size: [12, 8]
+  dpi: 300
+  color_palette: "husl"
+  
+  plots:
+    elasticity_curves: true
+    feature_importance: true
+    shap_analysis: true
+    business_metrics: true
+    model_diagnostics: true
