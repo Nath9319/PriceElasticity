@@ -195,8 +195,84 @@ desktop.ini
 
 # Project specific
 .kiro/
+
+# Documentation - Keep important docs, exclude PDFs and temp files
 *.pdf
-*.md
 !README.md
-*.txt
+!USER_GUIDE.md
+!EXECUTION_SUMMARY.md
+!IMPLEMENTATION_SUMMARY.md
+!*.md
+
+# Text files - Keep important configs
 !requirements.txt
+!task.txt
+
+# Data Science specific exclusions
+# Large datasets (keep small sample datasets)
+datasets/*.csv
+!datasets/sample_*.csv
+datasets/*.parquet
+datasets/*.feather
+
+# Large model files (keep smaller artifacts)
+models/trained/*.pkl
+!models/trained/training_results.json
+models/trained/*.joblib
+models/trained/*.model
+models/trained/*.h5
+models/trained/*.hdf5
+
+# Results and outputs (keep structure, exclude large files)
+results/**/*.csv
+results/**/*.png
+results/**/*.jpg
+results/**/*.html
+!results/**/README.md
+
+# Logs and temporary files
+logs/*.log
+logs/training_state.json
+
+# Keep important configs and metadata
+!config/**/*.yaml
+!config/**/*.json
+!models/feature_engineering/*.json
+
+# Jupyter notebook outputs
+*.ipynb
+.ipynb_checkpoints/
+
+# MLflow tracking
+mlruns/
+mlartifacts/
+
+# Weights & Biases
+wandb/
+
+# DVC
+.dvc/
+*.dvc
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+*.lnk

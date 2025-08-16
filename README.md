@@ -5,6 +5,7 @@ A comprehensive B2B price elasticity modeling platform with advanced machine lea
 ## 🌟 Features
 
 ### 🚀 Core Capabilities
+
 - **Advanced ML Models**: Hierarchical Bayesian, X-Learner (Causal ML), Ensemble, and Graph Neural Networks
 - **Interactive Dashboard**: Streamlit-powered analytics with scenario analysis and competitive modeling
 - **Real-time Inference**: Single predictions, batch processing, and advanced what-if scenarios
@@ -13,6 +14,7 @@ A comprehensive B2B price elasticity modeling platform with advanced machine lea
 - **SHAP Explainability**: Advanced model interpretability with automated business reports
 
 ### 🔧 Technical Features
+
 - **Advanced Feature Engineering**: 150+ automated features including temporal lags, B2B domain features, and graph-based interactions
 - **Graph Neural Networks**: GraphSAGE and GAT implementations for customer-product relationship modeling
 - **Scenario Analysis**: Interactive competitive response modeling and multi-scenario simulations
@@ -90,11 +92,13 @@ python model_training.py
 ```
 
 **Options:**
+
 - `--data path/to/data.csv`: Use custom data file
 - `--config path/to/config.yaml`: Use custom configuration
 - `--log-level DEBUG`: Set logging level
 
 **Example with custom data:**
+
 ```bash
 python model_training.py --data data/my_pricing_data.csv --log-level INFO
 ```
@@ -112,12 +116,14 @@ The dashboard will be available at `http://localhost:8501`
 ## 📊 Dashboard Features
 
 ### 🔍 EDA & Insights
+
 - **Interactive Visualizations**: Price distributions, win rate analysis, customer segmentation
-- **Temporal Analysis**: Seasonal patterns, trends, and time-based insights  
+- **Temporal Analysis**: Seasonal patterns, trends, and time-based insights
 - **Customer Analytics**: RFM analysis, segment performance, lifecycle metrics
 - **Competitive Analysis**: Market positioning and competitive intelligence
 
 ### 🤖 Model Inference
+
 - **Single Predictions**: Individual quote win probability prediction
 - **Batch Processing**: Bulk prediction with performance metrics
 - **What-If Analysis**: Scenario-based pricing optimization
@@ -125,12 +131,14 @@ The dashboard will be available at `http://localhost:8501`
 - **SHAP Explanations**: Feature importance analysis for individual predictions
 
 ### 🔍 Scenario Analysis (NEW!)
+
 - **Price Impact Simulation**: Interactive price adjustment modeling with segment analysis
 - **Strategy Optimization**: Multi-objective pricing optimization with constraints
 - **Competitive Response Modeling**: Market share evolution and competitor dynamics simulation
 - **Multi-Scenario Analysis**: Risk assessment with Value-at-Risk calculations and Monte Carlo simulation
 
 ### 📈 Performance Analytics
+
 - **Model Comparison**: Side-by-side performance metrics with advanced explainability
 - **SHAP Feature Importance**: Top drivers of price elasticity with business interpretations
 - **Elasticity Curves**: Interactive price elasticity visualization by segment
@@ -139,6 +147,7 @@ The dashboard will be available at `http://localhost:8501`
 - **Automated Reports**: Business-friendly insights and recommendations
 
 ### 🔍 Training Monitor
+
 - **Real-time Progress**: Live training status and progress
 - **Performance Tracking**: Model metrics during training including GNN models
 - **Error Monitoring**: Training issues and diagnostics
@@ -147,30 +156,35 @@ The dashboard will be available at `http://localhost:8501`
 ## 🚀 Advanced Features (NEW!)
 
 ### 🧠 SHAP Model Explainability
+
 - **Feature Importance Analysis**: Understand which factors drive pricing decisions
 - **Individual Prediction Explanations**: See why specific quotes win or lose
 - **Business-Friendly Interpretations**: Translate technical insights into actionable business language
 - **Automated Reports**: Generate comprehensive elasticity driver reports
 
 ### 🎯 Interactive Scenario Analysis
+
 - **Price Impact Simulation**: Model the effects of price changes across segments and market conditions
 - **Strategy Optimization**: Multi-objective optimization for revenue, profit, win rate, or market share
 - **Competitive Response Modeling**: Simulate competitor reactions and market dynamics
 - **Multi-Scenario Analysis**: Risk assessment with Monte Carlo simulation and Value-at-Risk
 
 ### 🕸️ Graph Neural Networks
+
 - **Customer-Product Networks**: Model complex relationship patterns
 - **GraphSAGE Implementation**: Scalable graph convolution for large networks
 - **Graph Attention Networks**: Interpretable attention-based relationship modeling
 - **Network Effect Features**: Capture spillover effects in pricing decisions
 
 ### ⚡ Advanced Feature Engineering
+
 - **150+ Sophisticated Features**: Including temporal lags, B2B domain features, and graph-based interactions
 - **STL Decomposition**: Advanced time series analysis with trend and seasonal components
 - **B2B Domain Features**: Contract structures, supply chain factors, and economic indicators
 - **Network Centrality**: Customer and product importance in the business network
 
 ### 📊 Expected Business Impact
+
 - **Revenue Optimization**: 8-15% improvement through advanced pricing strategies
 - **Win Rate Enhancement**: 15-25% improvement through sophisticated targeting
 - **Strategic Decision Support**: Competitive response modeling and scenario planning
@@ -182,16 +196,19 @@ The dashboard will be available at `http://localhost:8501`
 ### Supported Models
 
 1. **Hierarchical Bayesian Model**
+
    - Captures segment-level variations in price sensitivity
    - Incorporates uncertainty quantification
    - Uses PyMC for MCMC sampling with SHAP explainability
 
 2. **X-Learner (Causal ML)**
+
    - Estimates treatment effects of pricing changes
    - Uses EconML for causal inference
    - Addresses selection bias and confounding
 
 3. **Ensemble Model**
+
    - Stacking of LightGBM, XGBoost, CatBoost, Random Forest
    - Automated hyperparameter optimization
    - Ridge regression meta-learner with SHAP analysis
@@ -205,11 +222,13 @@ The dashboard will be available at `http://localhost:8501`
 ### Training Process
 
 1. **Data Loading & Validation**
+
    - Automatic schema validation
    - Data quality checks
    - Missing value analysis
 
 2. **Advanced Feature Engineering**
+
    - **Price Dynamics**: Volatility, trends, ratios, lag features
    - **Customer Value**: Enhanced RFM, CLV, tenure, price sensitivity analysis
    - **Competitive Positioning**: Market ratios, competitive intelligence
@@ -219,6 +238,7 @@ The dashboard will be available at `http://localhost:8501`
    - **Interaction Terms**: Price-customer-product sophisticated interactions
 
 3. **Model Training**
+
    - Cross-validation with time-series splits
    - Hyperparameter optimization with Optuna
    - Model selection and evaluation
@@ -231,12 +251,14 @@ The dashboard will be available at `http://localhost:8501`
 ## 📋 Data Requirements
 
 ### Required Columns
+
 - `Quote_ID`: Unique quote identifier
 - `Customer_ID`: Customer identifier
 - `Product_ID`: Product identifier
 - `Status`: Quote outcome ('Won'/'Lost')
 
 ### Optional Columns (Recommended)
+
 - `Quote_Date`: Quote timestamp
 - `List_Price`: Original price
 - `Net_Price`: Final quoted price
@@ -246,6 +268,7 @@ The dashboard will be available at `http://localhost:8501`
 - `Lifecycle_Stage`: Product lifecycle stage
 
 ### Sample Data Format
+
 ```csv
 Quote_ID,Customer_ID,Product_ID,Quote_Date,List_Price,Net_Price,Status,Customer_Segment,Product_Category
 Q000001,C0001,P001,2023-01-15,10000,8500,Won,Enterprise,Software
@@ -255,20 +278,21 @@ Q000002,C0002,P002,2023-01-16,15000,14000,Lost,Mid-Market,Hardware
 ## ⚙️ Configuration
 
 ### Model Configuration
+
 ```yaml
 models:
   hierarchical_bayesian:
     chains: 4
     draws: 2000
     tune: 1000
-  
+
   x_learner:
-    base_models: ['lightgbm', 'xgboost']
+    base_models: ["lightgbm", "xgboost"]
     dml_folds: 3
-  
+
   ensemble:
-    base_models: ['lightgbm', 'xgboost', 'catboost', 'random_forest']
-    meta_learner: 'ridge'
+    base_models: ["lightgbm", "xgboost", "catboost", "random_forest"]
+    meta_learner: "ridge"
 
 hyperparameter_optimization:
   optuna:
@@ -277,21 +301,23 @@ hyperparameter_optimization:
 ```
 
 ### Feature Engineering Configuration
+
 ```yaml
 feature_engineering:
   price_dynamics:
     windows: [7, 30, 90]
     volatility_window: 90
-  
+
   customer:
     rfm_quantiles: 5
     tenure_bins: [0, 90, 365, 730, 1825]
-    clv_method: 'traditional'
+    clv_method: "traditional"
 ```
 
 ## 📈 Performance Metrics
 
 ### Classification Metrics
+
 - **AUC-ROC**: Area under the receiver operating characteristic curve
 - **Accuracy**: Overall prediction accuracy
 - **Precision**: True positive rate among predicted positives
@@ -299,6 +325,7 @@ feature_engineering:
 - **F1-Score**: Harmonic mean of precision and recall
 
 ### Business Metrics
+
 - **Win Rate**: Proportion of won quotes
 - **Revenue Impact**: Expected revenue change from pricing decisions
 - **Price Sensitivity**: Elasticity coefficients by segment
@@ -307,6 +334,7 @@ feature_engineering:
 ## 🔧 Advanced Usage
 
 ### 🧠 Using SHAP Explainability
+
 ```python
 from src.training.model_training import PriceElasticityModelTraining
 
@@ -324,7 +352,9 @@ reports = trainer.create_automated_reports(model_results, shap_results, elastici
 ```
 
 ### 🎯 Scenario Analysis
+
 Access the new **Scenario Analysis** page in the Streamlit dashboard:
+
 1. Run `streamlit run inference.py`
 2. Navigate to "🔍 Scenario Analysis" in the sidebar
 3. Explore 4 interactive modules:
@@ -334,6 +364,7 @@ Access the new **Scenario Analysis** page in the Streamlit dashboard:
    - **Multi-Scenario Analysis**: Risk assessment and planning
 
 ### 🕸️ Graph Neural Networks
+
 ```python
 # GNN features are automatically included in comprehensive feature engineering
 from src.feature_engineering.feature_engineering import PriceElasticityFeatureEngineering
@@ -348,6 +379,7 @@ gnn_results = trainer.implement_graph_neural_networks(X, y)
 ## 🔧 Advanced Usage
 
 ### Custom Model Development
+
 ```python
 from src.training.model_training import PriceElasticityModelTraining
 
@@ -363,6 +395,7 @@ results = trainer.train_ensemble_model(X, y)
 ```
 
 ### Batch Inference
+
 ```python
 from src.feature_engineering.feature_engineering import PriceElasticityFeatureEngineering
 import joblib
@@ -383,15 +416,17 @@ predictions = model.predict_proba(features)[:, 1]
 ### Common Issues
 
 1. **Import Errors**
+
    ```bash
    # Ensure all dependencies are installed
    pip install -r requirements.txt
-   
+
    # Check Python path
    export PYTHONPATH="${PYTHONPATH}:$(pwd)/src"
    ```
 
 2. **Memory Issues**
+
    ```python
    # Reduce sample size in configuration
    # Use smaller hyperparameter search space
@@ -399,10 +434,11 @@ predictions = model.predict_proba(features)[:, 1]
    ```
 
 3. **Training Failures**
+
    ```bash
    # Check logs for detailed error messages
    tail -f logs/model_training.log
-   
+
    # Validate data format and required columns
    python scripts/validate_data.py your_data.csv
    ```
@@ -410,6 +446,7 @@ predictions = model.predict_proba(features)[:, 1]
 ### Performance Optimization
 
 1. **Speed up Training**
+
    - Reduce hyperparameter search trials
    - Use smaller cross-validation folds
    - Disable advanced models (Bayesian/Causal)
@@ -422,11 +459,13 @@ predictions = model.predict_proba(features)[:, 1]
 ## 📚 Documentation
 
 ### API Documentation
+
 - [Feature Engineering API](docs/feature_engineering.md)
 - [Model Training API](docs/model_training.md)
 - [Inference API](docs/inference.md)
 
 ### Tutorials
+
 - [Getting Started Tutorial](docs/tutorial_getting_started.md)
 - [Advanced Modeling](docs/tutorial_advanced_modeling.md)
 - [Custom Features](docs/tutorial_custom_features.md)
@@ -440,6 +479,7 @@ predictions = model.predict_proba(features)[:, 1]
 5. Open a Pull Request
 
 ### Development Setup
+
 ```bash
 # Install development dependencies
 pip install -r requirements.txt
@@ -459,6 +499,7 @@ mypy src/
 ```
 
 ### 🧪 Testing Advanced Features
+
 ```bash
 # Test all advanced features
 python test_advanced_features.py
@@ -494,6 +535,7 @@ For questions, issues, or feature requests:
 ## 🚀 Roadmap
 
 ### ✅ Version 2.0 (COMPLETED!)
+
 - [x] **SHAP Model Explainability**: Feature importance and automated business reports
 - [x] **Interactive Scenario Analysis**: Competitive modeling and multi-scenario simulation
 - [x] **Graph Neural Networks**: GraphSAGE and GAT implementations
@@ -501,6 +543,7 @@ For questions, issues, or feature requests:
 - [x] **Advanced Causal Inference**: Enhanced X-Learner with treatment effect analysis
 
 ### Version 2.1 (Next Release)
+
 - [ ] MLflow integration for experiment tracking
 - [ ] API endpoints for production deployment
 - [ ] Real-time streaming predictions
@@ -508,6 +551,7 @@ For questions, issues, or feature requests:
 - [ ] Advanced competitive intelligence
 
 ### Version 3.0 (Future)
+
 - [ ] Deep learning models (Neural ODEs, Transformers)
 - [ ] Real-time graph updates for dynamic networks
 - [ ] Automated causal discovery

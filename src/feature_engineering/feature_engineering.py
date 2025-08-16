@@ -1470,6 +1470,11 @@ class PriceElasticityFeatureEngineering:
         # Step 4.5: Handle datetime columns
         df_features = self._handle_datetime_columns(df_features)
         
+        # Step 4.75: Handle infinite values before scaling
+        numeric_cols = df_features.select_dtypes(include=[np.number]).columns
+        df_features[numeric_cols] = df_features[numeric_cols].replace([np.inf, -np.inf], np.nan)
+        df_features[numeric_cols] = df_features[numeric_cols].fillna(0)
+        
         # Step 5: Scale numerical features
         df_features = self.scale_features(df_features, fit=fit, method='robust')
         
