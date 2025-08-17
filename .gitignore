@@ -203,10 +203,14 @@ desktop.ini
 !EXECUTION_SUMMARY.md
 !IMPLEMENTATION_SUMMARY.md
 !*.md
+# Exclude specific project report files
+updated_validation_report.md
+requirements_validation_report.md
+comprehensive_validation_report.md
+task.txt
 
 # Text files - Keep important configs
 !requirements.txt
-!task.txt
 
 # Data Science specific exclusions
 # Large datasets (keep small sample datasets)
