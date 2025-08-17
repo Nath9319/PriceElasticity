@@ -66,10 +66,19 @@ except ImportError:
     print("Warning: PyTorch Geometric not available. GNN features will be limited.")
 
 
+# Import enhanced models
+sys.path.append(str(Path(__file__).parent.parent / "models"))
+from enhanced_price_elasticity_models import (
+    EnhancedHierarchicalBayesianModel,
+    EnhancedGraphNeuralNetworkModel, 
+    EnhancedEnsembleModel,
+    PriceOptimizationEngine
+)
+
 class PriceElasticityModelTraining:
     """
-    Comprehensive Model Training for Price Elasticity Analysis
-    Implements all three modeling approaches from requirements
+    Enhanced Price Elasticity Model Training with Dual Price Outputs
+    Implements enhanced models that predict both accurate and stretch prices
     """
     
     def __init__(self, config: Optional[Dict] = None):
@@ -84,13 +93,14 @@ class PriceElasticityModelTraining:
         self.models = {}
         self.model_metadata = {}
         self.training_results = {}
+        self.enhanced_models = {}  # Store enhanced dual-price models
         
         # Get model configurations
         self.model_configs = self.config.get('models', {})
         self.hpo_config = self.config.get('hyperparameter_optimization', {})
         self.validation_config = self.config.get('validation', {})
         
-        self.logger.info("Model Training initialized")
+        self.logger.info("Enhanced Model Training initialized")
     
     def prepare_training_data(self, df: pd.DataFrame, target_col: str = 'Status') -> Tuple[pd.DataFrame, pd.Series]:
         """
@@ -183,10 +193,10 @@ class PriceElasticityModelTraining:
         
         return splits[::-1]  # Return in chronological order
     
-    def train_hierarchical_bayesian_model(self, X: pd.DataFrame, y: pd.Series, 
-                                         segment_col: str = 'Customer_Segment') -> Dict[str, Any]:
+    def train_enhanced_hierarchical_bayesian_model(self, X: pd.DataFrame, y: pd.Series, 
+                                                  segment_col: str = 'Customer_Segment') -> Dict[str, Any]:
         """
-        Train Hierarchical Bayesian Model as per Requirement 2.1
+        Train Enhanced Hierarchical Bayesian Model with Dual Price Output
         
         Args:
             X: Feature matrix
@@ -194,16 +204,152 @@ class PriceElasticityModelTraining:
             segment_col: Column name for hierarchical grouping
             
         Returns:
-            Dictionary with model results
+            Dictionary with model results including dual price predictions
         """
-        self.logger.info("Training Hierarchical Bayesian Model...")
+        self.logger.info("Training Enhanced Hierarchical Bayesian Model...")
         
-        # Get configuration
-        hb_config = self.model_configs.get('hierarchical_bayesian', {})
+        # Initialize enhanced model
+        enhanced_model = EnhancedHierarchicalBayesianModel(self.config)
         
-        if not HAS_PYMC:
-            # Simulate with mixed effects model using statsmodels
-            return self._simulate_hierarchical_bayesian(X, y, segment_col, hb_config)
+        # Train the model
+        enhanced_model.fit(X, y)
+        
+        # Store the enhanced model
+        self.enhanced_models['hierarchical_bayesian'] = enhanced_model
+        
+        # Get predictions for evaluation
+        win_probabilities = enhanced_model.predict_win_probability(X)
+        accurate_prices, stretch_prices = enhanced_model.predict_dual_prices(X)
+        
+        # Calculate performance metrics
+        y_pred_binary = (win_probabilities > 0.5).astype(int)
+        
+        performance = {
+            'accuracy': accuracy_score(y, y_pred_binary),
+            'precision': precision_score(y, y_pred_binary, zero_division=0),
+            'recall': recall_score(y, y_pred_binary, zero_division=0),
+            'f1': f1_score(y, y_pred_binary, zero_division=0),
+            'auc': roc_auc_score(y, win_probabilities),
+            'log_loss': log_loss(y, win_probabilities)
+        }
+        
+        # Create results dictionary
+        results = {
+            'model_type': 'enhanced_hierarchical_bayesian',
+            'model': enhanced_model,
+            'performance': performance,
+            'segment_effects': getattr(enhanced_model, 'segment_effects', {}),
+            'predictions': win_probabilities,
+            'accurate_prices': accurate_prices,
+            'stretch_prices': stretch_prices,
+            'training_timestamp': datetime.now().isoformat(),
+            'dual_price_capability': True
+        }
+        
+        self.logger.info(f"Enhanced Hierarchical Bayesian model trained. AUC: {performance['auc']:.3f}")
+        return results
+        
+    def train_enhanced_graph_neural_network_model(self, X: pd.DataFrame, y: pd.Series) -> Dict[str, Any]:
+        """
+        Train Enhanced Graph Neural Network Model with Dual Price Output
+        
+        Args:
+            X: Feature matrix
+            y: Target vector
+            
+        Returns:
+            Dictionary with model results including dual price predictions
+        """
+        self.logger.info("Training Enhanced Graph Neural Network Model...")
+        
+        # Initialize enhanced model
+        enhanced_model = EnhancedGraphNeuralNetworkModel(self.config)
+        
+        # Train the model
+        enhanced_model.fit(X, y)
+        
+        # Store the enhanced model
+        self.enhanced_models['graph_neural_network'] = enhanced_model
+        
+        # Get predictions for evaluation
+        win_probabilities = enhanced_model.predict_win_probability(X)
+        accurate_prices, stretch_prices = enhanced_model.predict_dual_prices(X)
+        
+        # Calculate performance metrics
+        y_pred_binary = (win_probabilities > 0.5).astype(int)
+        
+        performance = {
+            'accuracy': accuracy_score(y, y_pred_binary),
+            'auc': roc_auc_score(y, win_probabilities)
+        }
+        
+        # Create results dictionary
+        results = {
+            'model_type': 'enhanced_graph_neural_network',
+            'model': enhanced_model,
+            'performance': performance,
+            'predictions': win_probabilities,
+            'accurate_prices': accurate_prices,
+            'stretch_prices': stretch_prices,
+            'training_timestamp': datetime.now().isoformat(),
+            'dual_price_capability': True
+        }
+        
+        self.logger.info(f"Enhanced Graph Neural Network model trained. AUC: {performance['auc']:.3f}")
+        return results
+        
+    def train_enhanced_ensemble_model(self, X: pd.DataFrame, y: pd.Series) -> Dict[str, Any]:
+        """
+        Train Enhanced Ensemble Model with Dual Price Output
+        
+        Args:
+            X: Feature matrix
+            y: Target vector
+            
+        Returns:
+            Dictionary with model results including dual price predictions
+        """
+        self.logger.info("Training Enhanced Ensemble Model...")
+        
+        # Initialize enhanced model
+        enhanced_model = EnhancedEnsembleModel(self.config)
+        
+        # Train the model
+        enhanced_model.fit(X, y)
+        
+        # Store the enhanced model
+        self.enhanced_models['ensemble'] = enhanced_model
+        
+        # Get predictions for evaluation
+        win_probabilities = enhanced_model.predict_win_probability(X)
+        accurate_prices, stretch_prices = enhanced_model.predict_dual_prices(X)
+        
+        # Calculate performance metrics
+        y_pred_binary = (win_probabilities > 0.5).astype(int)
+        
+        performance = {
+            'accuracy': accuracy_score(y, y_pred_binary),
+            'precision': precision_score(y, y_pred_binary, zero_division=0),
+            'recall': recall_score(y, y_pred_binary, zero_division=0),
+            'f1': f1_score(y, y_pred_binary, zero_division=0),
+            'auc': roc_auc_score(y, win_probabilities)
+        }
+        
+        # Create results dictionary
+        results = {
+            'model_type': 'enhanced_ensemble',
+            'model': enhanced_model,
+            'performance': performance,
+            'predictions': win_probabilities,
+            'accurate_prices': accurate_prices,
+            'stretch_prices': stretch_prices,
+            'training_timestamp': datetime.now().isoformat(),
+            'dual_price_capability': True,
+            'ensemble_weights': getattr(enhanced_model, 'ensemble_weights', {})
+        }
+        
+        self.logger.info(f"Enhanced Ensemble model trained. AUC: {performance['auc']:.3f}")
+        return results
         
         try:
             # Prepare data for PyMC
